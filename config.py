@@ -14,19 +14,36 @@
 #########################################################################
 
 import cosmo as co
+from colossus.cosmology import cosmology
+from colossus.utils import constants
+from astropy import units
 
 import numpy as np
 from scipy.interpolate import interp1d, RectBivariateSpline, splrep
 
 ########################## user control #################################
 
+# Set cosmology to Planck 2018 parameters
+cosmo_planck18 = cosmology.setCosmology('planck18')
+
+# Cosmological parameters
+Ob = cosmo_planck18.Ob0
+Om = cosmo_planck18.Om0
+OL = cosmo_planck18.Ode0
+On = cosmo_planck18.Onu0
+Ok = cosmo_planck18.cosmo.Ok0
+h = cosmo_planck18.h
+s8 = cosmo_planck18.sigma8
+ns = cosmo_planck18.ns
+Neff = cosmo_planck18.Neff
+
 #---cosmology 
-h = 0.7
-Om = 0.3
-Ob = 0.0465
-OL = 0.7
-s8 = 0.8
-ns = 1.
+#h = 0.7
+#Om = 0.3
+#Ob = 0.0465
+#OL = 0.7
+#s8 = 0.8
+#ns = 1.
 
 # COCO simulation values
 #h = 0.704
@@ -37,12 +54,12 @@ ns = 1.
 #ns = 0.967
 
 #---for merger tree (the parameters for the Parkinson+08 algorithm)
-M0 = 1e12 # [Msun] [DEFAULT]: Typically changed in TreeGen_Sub
+M0 = 1.0e12 # [Msun] [DEFAULT]: Typically changed in TreeGen_Sub
 Mres = None # [Msun] [DEFAULT]: mass resolution of merger tree
            # (Mres/M0 = psi_{res})
-psi_res = 10**-5 # Resolution limit of merger tree
-z0 = 0. # [DEFAULT]: Typically changed in TreeGen_Sub
-zmax = 20.
+psi_res = 10.0**-5 # Resolution limit of merger tree
+z0 = 0.0 # [DEFAULT]: Typically changed in TreeGen_Sub
+zmax = 20.0
 
 # Benson17 values
 #G0 = 0.6353 
@@ -57,7 +74,7 @@ gamma2 = 0.0488
 gamma3 = 0.202
 
 #---for satellite evolution 
-phi_res = 10**-5 # Resolution in m/m_{acc}
+phi_res = 10.0**-5 # Resolution in m/m_{acc}
 Rres = 0.001 # [kpc] spatial resolution (Over-written in SubEvo)
 lnL_pref = 0.75 # multiplier for Coulomb logarithm (fiducial 0.75)
 # NOTE: The lnL_pref default is 0.75, calibrated in Green+20
@@ -78,27 +95,31 @@ evo_mode = 'arbres' # or 'withering'
 
 ############################# constants #################################
 
-G = 4.4985e-06 # gravitational constant [kpc^3 Gyr^-2 Msun^-1]
-rhoc0 = 277.5 # [h^2 Msun kpc^-3]
+# Gravitational constant
+G = constants.G*((units.kpc*(units.km)**2)/(units.M_sun*(units.s)**2)).to((units.kpc**3)/(units.M_sun*(units.Gyr)**2)) # units in [kpc^3 Gyr^-2 Msun^-1]
+#G = 4.4985e-06 # gravitational constant [kpc^3 Gyr^-2 Msun^-1]
 
-ln10 = np.log(10.)
-Root2 = np.sqrt(2.)
+#rhoc0 = 277.5 # [h^2 Msun kpc^-3]
+rhoc0 = constants.RHO_CRIT_0_KPC3 # [h^2 Msun kpc^-3]
+
+ln10 = np.log(10.0)
+Root2 = np.sqrt(2.0)
 RootPi = np.sqrt(np.pi)
-Root2OverPi = np.sqrt(2./np.pi)
+Root2OverPi = np.sqrt(2.0/np.pi)
 Root1Over2Pi = np.sqrt(0.5/np.pi)
-TwoOverRootPi = 2./np.sqrt(np.pi)
-FourOverRootPi = 4./np.sqrt(np.pi)
-FourPiOverThree = 4.*np.pi/3.
-TwoPi = 2.*np.pi
-TwoPiG = 2.*np.pi*G
-TwoPisqr = 2.*np.pi**2
-ThreePi = 3.*np.pi
-FourPi = 4.*np.pi
-FourPiG = 4.*np.pi*G
-FourPiGsqr = 4.*np.pi * G**2. # useful for dynamical friction 
-ThreePiOverSixteenG = 3.*np.pi / (16.*G) # useful for dynamical time
+TwoOverRootPi = 2.0/np.sqrt(np.pi)
+FourOverRootPi = 4.0/np.sqrt(np.pi)
+FourPiOverThree = 4.0*np.pi/3.0
+TwoPi = 2.0*np.pi
+TwoPiG = 2.0*np.pi*G
+TwoPisqr = 2.0*np.pi**2.0
+ThreePi = 3.0*np.pi
+FourPi = 4.0*np.pi
+FourPiG = 4.0*np.pi*G
+FourPiGsqr = 4.0*np.pi * G**2.0 # useful for dynamical friction 
+ThreePiOverSixteenG = 3.0*np.pi / (16.0*G) # useful for dynamical time
 
-kms2kpcGyr = 1.0227 # multiplier for converting velocity from [km/s] to 
+kms2kpcGyr = (units.km/units.s).to(units.kpc/units.Gyr) # 1.0227 # multiplier for converting velocity from [km/s] to 
     #[kpc/Gyr] <<< maybe useless, as we may only work with kpc and Gyr 
 
 eps = 0.001 # an infinitesimal for various purposes: e.g., if the 
@@ -117,25 +138,25 @@ cosmo = {
     'h' : h,
     'n' : ns,
     'sigma_8' : s8,
-    'N_nu' : 0,
-    'omega_n_0' : 0.0,
-    'omega_k_0' : 0.0, 
+    'N_nu' : Neff,               # 0
+    'omega_n_0' : On,            # 0.0
+    'omega_k_0' : Ok,            # 0.0 
     'baryonic_effects': False,   # True or False
     # -- user keywords -- 
-    #'m_WDM' : 1.5,               # [keV], invoke WDM power spectrum
+    'm_WDM' : 6.5,               # [keV], invoke WDM power spectrum
     'MassVarianceChoice': 0,     # how to compute sigma(M,z=0): 
                                  # 0=integration, 1=interpolation 
     }
 
 print('>>> Normalizing primordial power spectrum P(k)=(k/k_0)^n_s ...')
 cosmo['k0'] = co.k0(**cosmo)
-print('    such that sigma(R=8Mpc/h) = %8.4f.'%(co.sigmaR(8.,**cosmo)))
+print('    such that sigma(R=8Mpc/h) = %8.4f.'%(co.sigmaR(8.0, **cosmo)))
 
 print('>>> Tabulating sigma(M,z=0) ...')
-lgM_grid  = np.linspace(1.,17.,1000)
-sigma_grid = co.sigma(10.**lgM_grid,z=0.,**cosmo)
-sigmalgM_interp = interp1d(lgM_grid, sigma_grid, kind='linear')
-cosmo['MassVarianceChoice'] = 1 
+lgM_grid  = np.linspace(1.0, 17.0, 1000)
+sigma_grid = co.sigma(10.0**lgM_grid, z = 0.0, **cosmo)
+sigmalgM_interp = interp1d(lgM_grid, sigma_grid, kind = 'linear')
+cosmo['MassVarianceChoice'] = 1
 print('    From now on, sigma(M,z) is computed by interpolation.')
 
 print('>>> Tabulating z(W) and z(t_lkbk)...')
