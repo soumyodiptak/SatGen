@@ -10,6 +10,11 @@
 import config as cfg
 
 import numpy as np
+from colossus.cosmology import cosmology
+from colossus.halo import mass_so
+from colossus.lss import peaks
+from astropy import units
+
 from scipy.integrate import quad
 from scipy.optimize import brentq
 import cosmolopy.distance as cdis
@@ -21,7 +26,20 @@ import cosmolopy.perturbation as cper
 
 #---basics 
 
-def rhoc(z,h=0.7,Om=0.3,OL=0.7):
+# Set cosmology to Planck 2018 parameters
+cosmo_planck18 = cosmology.setCosmology('planck18')
+
+# Cosmological parameters
+omega_b = cosmo_planck18.Ob0
+omega_m = cosmo_planck18.Om0
+omega_L = cosmo_planck18.Ode0
+h = cosmo_planck18.h
+
+# Setting Halo Mass Defnitions
+mass_definition = np.array(['vir', '200c'])
+
+
+def rhoc(z, h = h, Om = omega_m, OL = omega_L):
     """
     Critical density [Msun kpc^-3] at redshift z.
     
@@ -42,9 +60,10 @@ def rhoc(z,h=0.7,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return cfg.rhoc0 * h**2 * (Om*(1.+z)**3 + OL)
+    #return cfg.rhoc0 * h**2 * (Om*(1.+z)**3 + OL)
+    return cosmo_planck18.rho_c(z) * h**2
     
-def rhom(z,h=0.7,Om=0.3,OL=0.7):
+def rhom(z, h = h, Om = omega_m, OL = omega_L):
     """
     Mean density [Msun kpc^-3] at redshift z.
     
@@ -65,9 +84,10 @@ def rhom(z,h=0.7,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return Omega(z,Om,OL) * rhoc(z,h,Om,OL)
+    #return Omega(z,Om,OL) * rhoc(z,h,Om,OL)
+    return cosmo_planck18.rho_m(z) * h**2
     
-def DeltaBN(z,Om=0.3,OL=0.7):
+def DeltaBN(z, Om = omega_m, OL = omega_L):
     """
     Virial overdensity of Bryan & Norman (1998).
     
@@ -83,10 +103,11 @@ def DeltaBN(z,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    x = Omega(z,Om,OL) - 1.
-    return 18.*np.pi**2 + 82.*x - 39.*x**2
+    #x = Omega(z,Om,OL) - 1.
+    #return 18.*np.pi**2 + 82.*x - 39.*x**2
+    return mass_so.deltaVir(z)
 
-def Omega(z,Om=0.3,OL=0.7):
+def Omega(z, Om = omega_m, OL = omega_L):
     """
     Matter density in units of the critical density, at redshift z.
     
@@ -102,10 +123,11 @@ def Omega(z,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    fac = Om * (1.+z)**3
-    return fac / (fac + OL)
+    #fac = Om * (1.+z)**3
+    #return fac / (fac + OL)
+    return cosmo_planck18.Om(z)
 
-def tdyn(z,h=0.7,Om=0.3,OL=0.7):
+def tdyn(z, h = h, Om = omega_m, OL = omega_L):
     """
     Halo dynamical time [Gyr] defined as
     
@@ -131,9 +153,10 @@ def tdyn(z,h=0.7,Om=0.3,OL=0.7):
     
     Note that at high-z, this is rougly 0.1 times Hubble time 1/H(z).    
     """
-    return np.sqrt(2./DeltaBN(z,Om,OL)) / H(z,h,Om,OL)
+    #return np.sqrt(2./DeltaBN(z,Om,OL)) / H(z,h,Om,OL)
+    return mass_so.dynamicalTime(z, mdef = mass_definition[0], definition = 'crossing') # definition = crossing, peri, orbit ??
 
-def Ndyn(z1,z2,h=0.7,Om=0.3,OL=0.7):
+def Ndyn(z1, z2, h = h, Om = omega_m, OL = omega_L):
     """
     Number of halo dynamical times elapsed between redshift z1 and z2 
     (z1>z2).
@@ -156,9 +179,10 @@ def Ndyn(z1,z2,h=0.7,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return quad(dNdz, z1,z2, args=(h,Om,OL,),
-        epsabs=1.e-7, epsrel=1.e-6,limit=10000)[0]
-def dNdz(z,h,Om,OL):
+    return quad(dNdz, z1, z2, args = (h, Om, OL,),
+        epsabs = 1.e-7, epsrel = 1.e-6, limit = 10000)[0]
+
+def dNdz(z, h = h, Om = omega_m, OL = omega_L):
     r"""
     Auxiliary function for the function Ndyn -- the integrand, dN/dz(z),
     for computing 
@@ -183,20 +207,23 @@ def dNdz(z,h,Om,OL):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return dtdz(z,h,Om,OL) / tdyn(z,h,Om,OL)
-def dtdz(z,h,Om,OL):
+    #return dtdz(z,h,Om,OL) / tdyn(z,h,Om,OL)
+    return dtdz(z, h, Om, OL) / tdyn(z, h, Om, OL)
+
+def dtdz(z, h = h, Om = omega_m, OL = omega_L):
     """
     complementary function for computing N_dyn, it returns
         dt / dz
     i.e., cosmic time increment per redshift decrement 
     """
-    z1 = z*(1.-cfg.eps)
-    z2 = z*(1.+cfg.eps)
-    t1 = t(z1,h,Om,OL) # t1>t2 because z1<z2
-    t2 = t(z2,h,Om,OL)
-    return (t1-t2) / (z1-z2)
+    #z1 = z*(1.-cfg.eps)
+    #z2 = z*(1.+cfg.eps)
+    #t1 = t(z1,h,Om,OL) # t1>t2 because z1<z2
+    #t2 = t(z2,h,Om,OL)
+    #return (t1-t2) / (z1-z2)
+    return cosmo_planck18.age(z, derivative = 1)
 
-def H(z,h=0.7,Om=0.3,OL=0.7):
+def H(z, h = h, Om = omega_m, OL = omega_L):
     """
     Hubble constant [Gyr^-1] at redshift z.
     
@@ -217,9 +244,12 @@ def H(z,h=0.7,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return (h/9.778) * np.sqrt( Om*(1.+z)**3 + OL )
+    #return (h/9.778) * np.sqrt( Om*(1.+z)**3 + OL )
+    # Conversion factor from (km/s)/Mpc to 1/Gyrs
+    fac = (units.km / (units.s * units.Mpc)).to(1.0 / units.Gyr)
+    return cosmo_planck18.Hz(z) * fac
 
-def E(z,Om=0.3,OL=0.7):
+def E(z, Om = omega_m, OL = omega_L):
     """
     Hubble constant at redshift z in units of the Hubble constant at z=0.
         
@@ -237,9 +267,10 @@ def E(z,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return np.sqrt( Om*(1.+z)**3 + OL )
+    #return np.sqrt( Om*(1.+z)**3 + OL )
+    return cosmo_planck18.Ez(z)
     
-def t(z,h=0.7,Om=0.3,OL=0.7):
+def t(z, h = h, Om = omega_m, OL = omega_L):
     r"""
     Cosmic time [Gyr] (time since Big Bang).
     
@@ -260,11 +291,12 @@ def t(z,h=0.7,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    fac = OL / (1.+z)**3
-    return (9.778/h) * 2./(3.*np.sqrt(OL)) * \
-        np.log((np.sqrt(fac)+np.sqrt(fac+Om)) / np.sqrt(Om))
+    #fac = OL / (1.+z)**3
+    #return (9.778/h) * 2./(3.*np.sqrt(OL)) * \
+    #    np.log((np.sqrt(fac)+np.sqrt(fac+Om)) / np.sqrt(Om))
+    return cosmo_planck18.age(z)
 
-def tlkbk(z,h=0.7,Om=0.3,OL=0.7):
+def tlkbk(z, h = h, Om = omega_m, OL = omega_L):
     """
     Lookback time [Gyr] at redshift z.
     
@@ -285,7 +317,10 @@ def tlkbk(z,h=0.7,Om=0.3,OL=0.7):
         OL: dark-energy density in units of the critical density, at z=0
             (default=0.7) 
     """
-    return t(0.,h,Om,OL) - t(z,h,Om,OL) 
+    #return t(0.,h,Om,OL) - t(z,h,Om,OL)
+    return cosmo_planck18.lookbackTime(z)
+
+
 
 #------------------------- for EPS formalism ----------------------------
 # - critical overdensity for collapse, 
@@ -298,7 +333,7 @@ def tlkbk(z,h=0.7,Om=0.3,OL=0.7):
 #   They all depend on the CosmoloPy library, and thus are grouped here. 
 
 # critical overdensity for collapse
-def deltac(z,Om=0.3):
+def deltac(z, Om = omega_m):
     """
     Critical linearized overdensity for spherical collapse.
     
@@ -312,8 +347,8 @@ def deltac(z,Om=0.3):
         Om: matter density in units of the critical density, at z=0
             (default=0.3) 
     """
-    return 1.686 / D(z,Om)
-def D(z,Om=0.3):
+    return peaks.collapseOverdensity() / D(z, Om)
+def D(z, Om = omega_m):
     """
     Linear growth rate D(z).
     
@@ -327,7 +362,16 @@ def D(z,Om=0.3):
         Om: matter density in units of the critical density, at z=0
             (default=0.3) 
     """
-    return cper.fgrowth(z,Om) 
+    #return cper.fgrowth(z,Om)
+    return cosmo_planck18.growthFactor(z)
+
+# root-mean- square velocity
+def v_rms(m_WDM, z = 0.0, h = h, Om = omega_m, OL = omega_L, Ob = omega_b, g_WDM = 1.5):
+    return 0.0437 * (1.0 + z) * (((Om - Ob) * h**2) / 0.15)**(1.0/3.0) * (g_WDM / 1.5)**(-1.0/3) * m_WDM**(-4.0/3.0) # units in km/s
+
+# Smoothing Scale or Filtering Scale
+def R(m_WDM, h = h, Om = omega_m, Ob = omega_b):
+    return 0.226 * (((Om - Ob) * h**2) / 0.15)**(-0.14) * (v_rms(m_WDM) / 0.05)**0.86 # units in Mpc
 
 # transfer function    
 def T(k, **cosmo):
@@ -349,17 +393,24 @@ def T(k, **cosmo):
     following Bode+01 as cited by Lovell+14, to account for WDM effect.
     """ 
     h = cosmo['h']
-    k = h*k # CosmoloPy takes k in [Mpc^-1]
-    Ttmp = cper.transfer_function_EH(k, **cosmo)[0]
+    k_1 = h*k # CosmoloPy takes k in [Mpc^-1]
+    Ttmp = cosmo.matterPowerSpectrum(k, model = 'eisenstein98', output = 'tf') # CDM
+    #Ttmp = cper.transfer_function_EH(k, **cosmo)[0]
     if 'm_WDM' in cosmo:
-        a = 0.05 * cosmo['m_WDM']**(-1.15) * \
-            (cosmo['omega_M_0']/0.4)**0.15 * \
-            (h/0.65)**1.3
-        Ttmp = Ttmp * (1. + (a*k)**2 )**(-5)
+        #a = 0.05 * cosmo['m_WDM']**(-1.15) * \
+        #    (cosmo['omega_M_0']/0.4)**0.15 * \
+        #    (h/0.65)**1.3
+        epsilon = 0.361
+        eta = 5.0
+        nu = 1.2
+        #lambda_s = 0.226 * (((Om - Ob) * h**2) / 0.15)**(-0.14) * (v_rms(cosmo['m_WDM']) / 0.05)**0.86 # units in Mpc
+        lambda_s = R(cosmo['m_WDM']) # units in Mpc
+        Ttmp = Ttmp * (1.0 + (epsilon * k_1 * lambda_s)**(2*nu))**(-eta/nu)
+        #Ttmp = Ttmp * (1. + (a*k)**2 )**(-5)
     return Ttmp
 
 # power spectrum
-def P(k,z=0.,**cosmo):
+def P(k, z = 0.0, **cosmo):
     """
     Power spectrum. 
     
@@ -375,10 +426,15 @@ def P(k,z=0.,**cosmo):
     """
     Om = cosmo['omega_M_0']
     ns = cosmo['n']
-    if 'k0' not in cosmo: # i.e., not normalized yet
-        return (T(k,**cosmo)*D(z,Om))**2. * (k/k0(**cosmo))**ns
-    else:                 # i.e., already normalized to sigma_8
-        return (T(k,**cosmo)*D(z,Om))**2. * (k/cosmo['k0'])**ns
+    if 'm_WDM' not in cosmo: # i.e. normalized only when the filter function is top-hat
+        if 'k0' not in cosmo: # i.e., not normalized yet
+            Ptmp = (T(k, **cosmo) * D(z, Om))**2.0 * (k / k0(**cosmo))**ns
+        else: # i.e., already normalized to sigma_8
+            Ptmp = (T(k, **cosmo) * D(z, Om))**2.0 * (k / cosmo['k0'])**ns
+    else: # WDM
+        Ptmp = (T(k, **cosmo) * D(z, Om))**2.0
+    return Ptmp
+    
 def k0(**cosmo):
     """
     Normalization (k_0) of the primordial power spectrum 
@@ -397,13 +453,15 @@ def k0(**cosmo):
     
         cosmo: cosmological parameters (dictionary defined in config.py)
     """
-    cosmo['k0'] = 1./3000. # give a temporary, arbitrary normalization 
-    k0tmp = cosmo['k0']
-    s8 = cosmo['sigma_8']
-    ns = cosmo['n']
-    s8tmp = sigmaR(8.,**cosmo)
-    return k0tmp * (s8tmp / s8 )**(2./ns)
-def sigmaR(R,**cosmo):
+    #cosmo['k0'] = 1./3000. # give a temporary, arbitrary normalization 
+    #k0tmp = cosmo['k0']
+    #s8 = cosmo['sigma_8']
+    #ns = cosmo['n']
+    #s8tmp = sigmaR(8.,**cosmo)
+    #return k0tmp * (s8tmp / s8 )**(2./ns)
+    return cosmo.matterPowerSpectrumNorm(model = 'eisenstein98')
+
+def sigmaR(R = R, a = 2.5, **cosmo):
     """
     Variance of density field smoothed over a spatial scale, linearly 
     extrapolated to z=0.
@@ -428,42 +486,48 @@ def sigmaR(R,**cosmo):
     
         the sqrt of the variance, i.e., sigma(R) (float) 
     """
-    lnkc = np.log(1./R) # discontinuity of the integrand at ln(k_c)
+    #lnkc = np.log(1./R) # discontinuity of the integrand at ln(k_c)
     # divide the integral range at the discontinuity, ln(k_c), and 
     # integrate separately for the two parts
-    S1, S1err = quad(dSdlnk, -50., lnkc, args=(R,cosmo),
-                     epsabs=1e-7, epsrel=1e-6,limit=10000)
-    S2, S2err = quad(dSdlnk, lnkc, 50., args=(R,cosmo),
-                     epsabs=1e-7, epsrel=1e-6,limit=10000)
-    S = S1+S2
-    return np.sqrt(S)
-def dSdlnk(lnk,R,cosmo):
-    """
-    Auxiliary function -- the integrand for "sigmaR".
-    """
-    k = np.exp(lnk)
-    return DeltaSqr(k,z=0.,**cosmo) * W(k,R)**2
-def DeltaSqr(k,z=0.,**cosmo):
-    """
-    Dimensionless power spectrum,
-    
-        Delta(k)^2 := k^3 P(k) / (2 pi^2), 
-        
-    which represents the contribution per log wavenumber of the power 
-    spectrum to the variance.
-    
-    Syntax:
-    
-        DeltaSqr(k,z=0.,**cosmo)
-    
-    where 
-    
-        k: wave number [h Mpc^-1] (float or array)
-        z: redshift (default=0.)
-        cosmo: cosmological parameters (dictionary defined in config.py)
-    """
-    return k**3 / cfg.TwoPisqr * P(k,z,**cosmo)
-def W(k,R):
+    #S1, S1err = quad(dSdlnk, -50., lnkc, args=(R,cosmo),
+    #                 epsabs=1e-7, epsrel=1e-6,limit=10000)
+    #S2, S2err = quad(dSdlnk, lnkc, 50., args=(R,cosmo),
+    #                 epsabs=1e-7, epsrel=1e-6,limit=10000)
+    #S = S1+S2
+    #return np.sqrt(S)
+    if 'm_WDM' in cosmo:
+        R_filter = R(cosmo['m_WDM']) / a
+    return cfg.FourPi * cosmo.sigma(R = R_filter, z = 0.0, filt = 'sharp-k', kmin = None, kmax = None, ps_args = {'model': 'eisenstein98'})
+
+#def dSdlnk(lnk,R,cosmo):
+#    """
+#    Auxiliary function -- the integrand for "sigmaR".
+#    """
+#    k = np.exp(lnk)
+#    return DeltaSqr(k,z=0.,**cosmo) * W(k,R)**2
+
+#def DeltaSqr(k,z=0.,**cosmo):
+#    """
+#    Dimensionless power spectrum,
+#    
+#        Delta(k)^2 := k^3 P(k) / (2 pi^2), 
+#        
+#    which represents the contribution per log wavenumber of the power 
+#    spectrum to the variance.
+#    
+#    Syntax:
+#    
+#        DeltaSqr(k,z=0.,**cosmo)
+#    
+#    where 
+#    
+#        k: wave number [h Mpc^-1] (float or array)
+#        z: redshift (default=0.)
+#        cosmo: cosmological parameters (dictionary defined in config.py)
+#    """
+#    return k**3 / cfg.TwoPisqr * P(k,z,**cosmo)
+
+def W(k, a = 2.5):
     """
     F.T. of a spherical tophat window function of a given spatial scale. 
     
@@ -476,9 +540,12 @@ def W(k,R):
         k: wave number [h Mpc^-1] (float or array)
         R: the comoving spatial scale of interest [Mpc/h] (float)
     """
-    x = k*R
-    j1 = (np.sin(x) - x*np.cos(x)) / x**2.
-    return 3.*j1/x
+    #x = k*R
+    #j1 = (np.sin(x) - x*np.cos(x)) / x**2.
+    #return 3.*j1/x
+    if 'm_WDM' in cosmo:
+        R_filter = R(cosmo['m_WDM']) / a
+    return cosmo.filterFunction(filt = 'sharp-k', k = k, R = R_filter)
 
 # mass variance
 def sigma(M,z=0.,**cosmo):
@@ -508,6 +575,7 @@ def sigma(M,z=0.,**cosmo):
         return sigmaM(M,**cosmo) * D(z,Om)
     else:
         return sigmaM_vec(M,**cosmo) * D(z,Om)
+    return peaks.collapseOverdensity()
 def sigmaM(M,**cosmo):
     """
     Variance of density field smoothed over a mass scale, linearly 
@@ -539,7 +607,7 @@ def sigmaM(M,**cosmo):
 sigmaM_vec = np.vectorize(sigmaM, doc="Vectorized 'sigmaM'")
 
 # peak height
-def nu(M,z=0,**cosmo):
+def nu(M, z = 0.0, **cosmo):
     """
     Peak height, 
     
@@ -559,7 +627,8 @@ def nu(M,z=0,**cosmo):
         z: redshift (default=0.)
         cosmo: cosmological parameters (dictionary defined in config.py)
     """
-    return 1.686 / sigma(M,z,**cosmo)
+    #return 1.686 / sigma(M,z,**cosmo)
+    return peaks.peakHeight(M * h, z, ps_args = {'model': 'eisenstein98'}, sigma_args = {})
 
 # Parkinson+08 algorithm  
 
